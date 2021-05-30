@@ -6,8 +6,10 @@ catkin_make
 ```
 # wrs_stock_pose
 
-## Dependencies
 ### Branch: ArUco
+![ArUco Markers and Cloud](data/aruco_marker_cloud.png)
+
+## Dependencies
 * Install [realsense-ros](https://github.com/IntelRealSense/realsense-ros)
 * Install ArUco `$ pip3 install opencv-contrib-python`
 
@@ -22,6 +24,7 @@ catkin_make
 * Install cv_bridge(?)
 
 ## Detect ArUco Markers
+![rqt_graph Detect ArUco](data/detect_aruco.png)
 
 ```
 <Terminal 1>
@@ -40,6 +43,7 @@ catkin_make
 ```
 
 ## Detect ArUco Markers' Cloud Pose
+![rqt_graph Detect ArUco Markers' Cloud Pose](data/detect_aruco_pose.png)
 
 ### Usage 1: Combine Realsense, Detect_Aruco, Rviz into launch file
 ```
