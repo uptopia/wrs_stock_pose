@@ -1,6 +1,4 @@
 ```
-cd ~
-mkdir ~/<ws_name>/src && cd ~/<ws_name>/src
 git clone https://github.com/uptopia/wrs_stock_pose.git
 git checkout <branch-name>
 cd ..
