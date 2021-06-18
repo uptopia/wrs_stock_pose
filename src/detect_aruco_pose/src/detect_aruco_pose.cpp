@@ -16,7 +16,11 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h> //"pcl::fromROSMsg"
 
+// aruco
+#include <aruco_msgs/ArucoMarkerArray.h>
+
 #include <boost/make_shared.hpp>
+
 // pcl
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -149,6 +153,40 @@ void aruco_corners_cb(const std_msgs::Float64MultiArray::ConstPtr& corners_msg)
     cout << "Total ArUco Markers Detected = " << total_marker_num << endl;   //ERROR: display 1 even if no obj detected
 }
 
+void aruco_corners_new_cb(const aruco_msgs::ArucoMarkerArray::ConstPtr& aruco_msg)
+{
+    // cout << "aruco_corners_cb" << endl;
+    // ROS_INFO("I heard: [%f],[%f],[%f],[%f]", corners_msg->data.at(0),corners_msg->data.at(1),corners_msg->data.at(2),corners_msg->data.at(3));
+    
+    int total_marker_num = 0;
+
+    if(!aruco_msg->ids.empty())
+    {
+        total_marker_num = aruco_msg->corners.size() / 8; 
+        marker_all.resize(total_marker_num);
+
+        for(int k = 0; k < total_marker_num; ++k)
+        {
+            int x1 = aruco_msg->corners.at(8*k);
+            int y1 = aruco_msg->corners.at(8*k+1);
+            int x3 = aruco_msg->corners.at(8*k+4);       
+            int y3 = aruco_msg->corners.at(8*k+5);
+
+            // marker_all[k].id = aruco_msg->markers[k].ID;
+            
+            marker_all[k].corner_pixel.assign(aruco_msg->corners.begin()+8*k, aruco_msg->corners.begin()+8*k+8);
+            marker_all[k].center_pixel.x = int((x1 +x3)/2.0);
+            marker_all[k].center_pixel.y = int((y1 +y3)/2.0);
+        }
+    }
+    else
+        total_marker_num = 0;
+        marker_all.resize(total_marker_num);
+ 
+    cout << "Total ArUco Markers Detected = " << total_marker_num << endl;   //ERROR: display 1 even if no obj detected
+
+}
+
 void CalculatePCA(pcl::PointCloud<PointTRGB>::Ptr & cloud, Eigen::Matrix3f eigenVectorsPCA)
 {
     Eigen::Vector4f pcaCentroid;
@@ -204,6 +242,8 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
         {
             cout << "Marker #" << n << endl;
             
+            //TODO: 改畫marker的方法 要貼合marker 而不是bounding box
+
             //=========================================//
             // Extract Sauce's Depth Cloud(Orgainized)
             // 2D pixel mapping to 3D points
@@ -455,7 +495,8 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
 
     // ArucoMarkers的角點 Corners of Aruco Markers
-    ros::Subscriber sub_aruco_corners = nh.subscribe<std_msgs::Float64MultiArray>("/aruco_corners", 1, aruco_corners_cb);
+    // ros::Subscriber sub_aruco_corners = nh.subscribe<std_msgs::Float64MultiArray>("/aruco_corners", 1, aruco_corners_cb);
+    ros::Subscriber sub_aruco_corners_new = nh.subscribe<aruco_msgs::ArucoMarkerArray>("/aruco_corners_new", 1, aruco_corners_new_cb);
 
     // ArUco Markers' Cloud
     ros::Subscriber sub_aruco_cloud = nh.subscribe("/camera/depth_registered/points", 1, aruco_cloud_cb);

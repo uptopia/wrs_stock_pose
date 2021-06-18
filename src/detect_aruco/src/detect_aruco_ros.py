@@ -31,6 +31,7 @@ import rospy
 from std_msgs.msg import String, Float64MultiArray
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
+from aruco_msgs.msg import ArucoMarkerArray
 
 import cv2
 import cv2.aruco as aruco
@@ -107,6 +108,7 @@ class ArUcoMarkerPosture():
         self.sub_markers = rospy.Subscriber('/camera/color/image_raw', Image, self.detect_aruco_markers)
         
         self.pub_corners = rospy.Publisher('aruco_corners', Float64MultiArray, queue_size = 1)
+        self.pub_corners_pose = rospy.Publisher('aruco_corners_new', ArucoMarkerArray, queue_size = 1)
                 
     def get_camera_info(self, camera_info):
         self.height = camera_info.height
@@ -118,8 +120,10 @@ class ArUcoMarkerPosture():
     def detect_aruco_markers(self, data):
         global corners
         # Constant parameters used in Aruco methods
-        markerLength = 0.02
+        markerLength = 0.020
+        axisLength = 0.010
         ARUCO_PARAMETERS = aruco.DetectorParameters_create()
+        # ARUCO_PARAMETERS.adaptiveThreshConstant = 10
         ARUCO_DICT = aruco.Dictionary_get(aruco.DICT_6X6_1000)
 
         bridge = CvBridge()
@@ -136,23 +140,29 @@ class ArUcoMarkerPosture():
 
         font = cv2.FONT_HERSHEY_SIMPLEX
         if ids is not None:
-            self.publish_aruco_marker_corners(corners)
+            # self.publish_aruco_marker_corners(corners)
 
             ### NOTICE: some Opencv version use 2 output "rvec, tvec", others use 3 output "rvec, tvec, _"!!!!
-            rvec, tvec = aruco.estimatePoseSingleMarkers(corners, markerLength, self.intrinsic_matrix, self.distortion_coefficients)
+            rvecs, tvecs = aruco.estimatePoseSingleMarkers(corners, markerLength, self.intrinsic_matrix, self.distortion_coefficients)
             # (rvec - tvec).any()  # get rid of that nasty numpy value array error
 
-            # Print corners and ids to the console
-            for i, corner in zip(ids, corners):
-                print('ID: {};\nCorners:\n{}'.format(i, corner))    
+            # print("ids", ids[:][0])
+            self.publish_aruco_corners_pose(ids, corners, rvecs, tvecs)
+
+            # # Print corners and ids to the console
+            # for i, corner in zip(ids, corners):
+            #     print('ID: {};\nCorners:\n{}'.format(i, corner))    
 
             strg = ''
             for n in range(0, ids.size):
                 strg += str(ids[n][0])+', '
-                aruco.drawAxis(cv_image, self.intrinsic_matrix, self.distortion_coefficients, rvec[n], tvec[n], 0.01)
+                aruco.drawAxis(cv_image, self.intrinsic_matrix, self.distortion_coefficients, rvecs[n], tvecs[n], axisLength)
+                # print(rvecs[n])
+                # print(tvecs[n])
+
 
             # Outline all of the markers detected in our image
-            aruco.drawDetectedMarkers(cv_image, corners, ids, borderColor = (0, 0, 255))
+            aruco.drawDetectedMarkers(cv_image, corners)#, ids)#, borderColor = (0, 0, 255))
             cv2.putText(cv_image, "Id: " + strg, (10,30), font, 1, (0,0,255), 2, cv2.LINE_AA)
 
         else:
@@ -161,6 +171,39 @@ class ArUcoMarkerPosture():
 
         cv2.imshow('cv_image', cv_image)
         cv2.waitKey(1)
+
+    def publish_aruco_corners_pose(self, ids, corners, rvecs, tvecs):
+        aruco_msgs = ArucoMarkerArray()
+
+        ids_list = []
+        corners_list = []
+        rvecs_list = []
+        tvecs_list = []
+
+        for id, corner, rvec, tvec in zip(ids, corners, rvecs, tvecs):
+            print('ID: {};\nCorners:\n{}'.format(id, corner))
+
+            ids_list.append(int(id))
+
+            for angle in range(0, len(corner)):
+                corners_list.append(corner[0][angle][0]) # angle.pixel_x
+                corners_list.append(corner[0][angle][1]) # angle.pixel_y
+
+            
+            rvecs_list.append(rvec[0][0])
+            rvecs_list.append(rvec[0][1])
+            rvecs_list.append(rvec[0][2])
+
+            tvecs_list.append(tvec[0][0])
+            tvecs_list.append(tvec[0][1])
+            tvecs_list.append(tvec[0][2])         
+
+        aruco_msgs.ids = ids_list
+        aruco_msgs.corners = corners_list
+        aruco_msgs.rvecs = rvecs_list
+        aruco_msgs.tvecs = tvecs_list
+
+        self.pub_corners_pose.publish(aruco_msgs)
 
     def publish_aruco_marker_corners(self, corners):              
         corners_list = []
