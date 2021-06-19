@@ -107,7 +107,7 @@ class ArUcoMarkerPosture():
         self.sub_camera_info = rospy.Subscriber('/camera/color/camera_info', CameraInfo, self.get_camera_info)    
         self.sub_markers = rospy.Subscriber('/camera/color/image_raw', Image, self.detect_aruco_markers)
         
-        self.pub_corners = rospy.Publisher('aruco_corners', Float64MultiArray, queue_size = 1)
+        # self.pub_corners = rospy.Publisher('aruco_corners', Float64MultiArray, queue_size = 1)
         self.pub_corners_pose = rospy.Publisher('aruco_corners_new', ArucoMarkerArray, queue_size = 1)
                 
     def get_camera_info(self, camera_info):
@@ -205,19 +205,19 @@ class ArUcoMarkerPosture():
 
         self.pub_corners_pose.publish(aruco_msgs)
 
-    def publish_aruco_marker_corners(self, corners):              
-        corners_list = []
-        for num in range(0, len(corners)):
-            corner = corners[num][0]
+    # def publish_aruco_marker_corners(self, corners):              
+    #     corners_list = []
+    #     for num in range(0, len(corners)):
+    #         corner = corners[num][0]
             
-            for angle in range(0, len(corner)):                
-                corners_list.append(corner[angle][0]) # angle.pixel_x
-                corners_list.append(corner[angle][1]) # angle.pixel_y
+    #         for angle in range(0, len(corner)):                
+    #             corners_list.append(corner[angle][0]) # angle.pixel_x
+    #             corners_list.append(corner[angle][1]) # angle.pixel_y
         
-        corners_ros_msg = Float64MultiArray()
-        corners_ros_msg.data = corners_list
-        # rospy.loginfo(corners_ros_msg)     
-        self.pub_corners.publish(corners_ros_msg)
+    #     corners_ros_msg = Float64MultiArray()
+    #     corners_ros_msg.data = corners_list
+    #     # rospy.loginfo(corners_ros_msg)     
+    #     self.pub_corners.publish(corners_ros_msg)
 
 
 if __name__ == '__main__':

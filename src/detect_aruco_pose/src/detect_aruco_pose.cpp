@@ -66,6 +66,8 @@ struct ArucoMarker
     Center2D center_pixel;
     Center3D center_point;
     PointCloudTRGBPtr marker_cloud;
+    std::vector<double> rvec;
+    std::vector<double> tvec;
     // Eigen::Matrix4f marker_pose; #from aruco rvec,tvec/pointcloud normal
 };
 
@@ -172,11 +174,17 @@ void aruco_corners_new_cb(const aruco_msgs::ArucoMarkerArray::ConstPtr& aruco_ms
             int x3 = aruco_msg->corners.at(8*k+4);       
             int y3 = aruco_msg->corners.at(8*k+5);
 
-            // marker_all[k].id = aruco_msg->markers[k].ID;
-            
+            marker_all[k].id = aruco_msg->ids[k];
+                        
             marker_all[k].corner_pixel.assign(aruco_msg->corners.begin()+8*k, aruco_msg->corners.begin()+8*k+8);
             marker_all[k].center_pixel.x = int((x1 +x3)/2.0);
             marker_all[k].center_pixel.y = int((y1 +y3)/2.0);
+
+            marker_all[k].rvec = {aruco_msg->rvecs.at(6*k), aruco_msg->rvecs.at(6*k+1), aruco_msg->rvecs.at(6*k+2)};
+            marker_all[k].tvec = {aruco_msg->tvecs.at(6*k), aruco_msg->tvecs.at(6*k+1), aruco_msg->tvecs.at(6*k+2)};
+
+            cout<<"rvec:"<<marker_all[k].rvec[0]<<" "<<marker_all[k].rvec[1]<<" "<<marker_all[k].rvec[2]<<endl;
+            cout<<"tvec:"<<marker_all[k].tvec[0]<<" "<<marker_all[k].tvec[1]<<" "<<marker_all[k].tvec[2]<<endl;            
         }
     }
     else
