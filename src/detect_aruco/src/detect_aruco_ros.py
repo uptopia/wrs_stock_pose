@@ -185,7 +185,7 @@ class ArUcoMarkerPosture():
 
             ids_list.append(int(id))
 
-            for angle in range(0, len(corner)):
+            for angle in range(0, len(corner[0])):                
                 corners_list.append(corner[0][angle][0]) # angle.pixel_x
                 corners_list.append(corner[0][angle][1]) # angle.pixel_y
 

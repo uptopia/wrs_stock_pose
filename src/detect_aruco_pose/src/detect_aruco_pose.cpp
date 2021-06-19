@@ -161,28 +161,32 @@ void aruco_corners_new_cb(const aruco_msgs::ArucoMarkerArray::ConstPtr& aruco_ms
     // ROS_INFO("I heard: [%f],[%f],[%f],[%f]", corners_msg->data.at(0),corners_msg->data.at(1),corners_msg->data.at(2),corners_msg->data.at(3));
     
     int total_marker_num = 0;
-
-    if(!aruco_msg->ids.empty())
+    cout<<aruco_msg->ids[0]<<", "<<aruco_msg->ids.empty()<<", "<< aruco_msg->ids.size()<<","<<(aruco_msg->ids.size()!=0)<<endl;
+    // if(!aruco_msg->ids.empty())
+    if(aruco_msg->ids.size()!=0)
     {
         total_marker_num = aruco_msg->corners.size() / 8; 
+        cout<<"total_marker_num:"<<aruco_msg->corners.size()<<","<<aruco_msg->corners.size()/8<<endl;
+        cout<<"rvecs size: "<<aruco_msg->rvecs.size()<<endl;
+        cout<<"tvecs size: "<<aruco_msg->tvecs.size()<<endl;
         marker_all.resize(total_marker_num);
 
         for(int k = 0; k < total_marker_num; ++k)
         {
-            int x1 = aruco_msg->corners.at(8*k);
-            int y1 = aruco_msg->corners.at(8*k+1);
-            int x3 = aruco_msg->corners.at(8*k+4);       
+            
+            int x1 = aruco_msg->corners.at(8*k);            
+            int y1 = aruco_msg->corners.at(8*k+1);            
+            int x3 = aruco_msg->corners.at(8*k+4);            
             int y3 = aruco_msg->corners.at(8*k+5);
 
-            marker_all[k].id = aruco_msg->ids[k];
-                        
-            marker_all[k].corner_pixel.assign(aruco_msg->corners.begin()+8*k, aruco_msg->corners.begin()+8*k+8);
-            marker_all[k].center_pixel.x = int((x1 +x3)/2.0);
-            marker_all[k].center_pixel.y = int((y1 +y3)/2.0);
-
-            marker_all[k].rvec = {aruco_msg->rvecs.at(6*k), aruco_msg->rvecs.at(6*k+1), aruco_msg->rvecs.at(6*k+2)};
-            marker_all[k].tvec = {aruco_msg->tvecs.at(6*k), aruco_msg->tvecs.at(6*k+1), aruco_msg->tvecs.at(6*k+2)};
-
+            marker_all[k].id = aruco_msg->ids[k];            
+            marker_all[k].corner_pixel.assign(aruco_msg->corners.begin()+8*k, aruco_msg->corners.begin()+8*k+8);            
+            marker_all[k].center_pixel.x = int((x1 +x3)/2.0);            
+            marker_all[k].center_pixel.y = int((y1 +y3)/2.0);            
+            marker_all[k].rvec = {aruco_msg->rvecs.at(3*k), aruco_msg->rvecs.at(3*k+1), aruco_msg->rvecs.at(3*k+2)};            
+            marker_all[k].tvec = {aruco_msg->tvecs.at(3*k), aruco_msg->tvecs.at(3*k+1), aruco_msg->tvecs.at(3*k+2)};
+            
+            cout<<"k:"<<k<<endl;
             cout<<"rvec:"<<marker_all[k].rvec[0]<<" "<<marker_all[k].rvec[1]<<" "<<marker_all[k].rvec[2]<<endl;
             cout<<"tvec:"<<marker_all[k].tvec[0]<<" "<<marker_all[k].tvec[1]<<" "<<marker_all[k].tvec[2]<<endl;            
         }
@@ -220,15 +224,13 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
     //==================================================//
     // 有序點雲 Organized Point Cloud; Depth Point Cloud
     // Subscribe "/camera/depth_registered/points" topic
-    //==================================================//
-    // cout << "organized_cloud_
+    //==================================================//  
 
-    int height = organized_cloud_msg->height;
-    int width = organized_cloud_msg->width;
+    int height = organized_cloud_msg->height; //480
+    int width = organized_cloud_msg->width;   //640  
     int points = height * width;
 
-    // cout<<"(height, width) = "<<height<<", "<<width<<endl;
-    if((points==0))// && (save_organized_cloud ==true))
+    if((points==0))
     {
         cout<<"PointCloud No points!!!!!!\n";
         //break? pass?
@@ -238,12 +240,7 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
         // 將點雲格式由sensor_msgs/PointCloud2轉成pcl/PointCloud(PointXYZ, PointXYZRGB)
         organized_cloud_ori->clear();
         pcl::fromROSMsg(*organized_cloud_msg, *organized_cloud_ori);
-
-        // cout << "organized_cloud_ori saved: " << file_path_cloud_organized << "; (width, height) = " << organized_cloud_ori->width << ", " << organized_cloud_ori->height << endl;
-        // pcl::io::savePCDFileBinary<PointTRGB>(file_path_cloud_organized, *organized_cloud_ori); //savePCDFileASCII
-        // cout << "organized_cloud_ori saved: DONE! \n";
-    
-        // pcl::PointCloud<PointTRGB>::Ptr aruco_clouds(new pcl::PointCloud<PointTRGB>);            
+      
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr aruco_clouds(new pcl::PointCloud<pcl::PointXYZRGBNormal>);            
 
         for(int n = 0; n < marker_all.size(); ++n)
@@ -258,58 +255,31 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             //=========================================//
             marker_all[n].marker_cloud = boost::make_shared<pcl::PointCloud<PointTRGB>>();
          
-            int x1 = marker_all[n].corner_pixel[0];
-            int x2 = marker_all[n].corner_pixel[2];
-            int x3 = marker_all[n].corner_pixel[4];
-            int x4 = marker_all[n].corner_pixel[6]; 
+            int x1 = marker_all[n].corner_pixel[0]; //corner #1
             int y1 = marker_all[n].corner_pixel[1];
+            int x2 = marker_all[n].corner_pixel[2]; //corner #2
             int y2 = marker_all[n].corner_pixel[3];
+            int x3 = marker_all[n].corner_pixel[4]; //corner #3
             int y3 = marker_all[n].corner_pixel[5];
+            int x4 = marker_all[n].corner_pixel[6]; //corner #4        
             int y4 = marker_all[n].corner_pixel[7];
-            cout<<x1<<","<<x2<<","<<x3<<","<<x4<<","<<y1<<","<<y2<<","<<y3<<","<<y4<<endl;
-            // std::vector<int> x{x1, x2, x3, x4};
-            // std::vector<int> y{y1, y2, y3, y4};
-          
-            // int xmax = *std::max_element(x.begin(), x.end());
-            // int xmin = *std::min_element(x.begin(), x.end());
-            // int ymax = *std::max_element(y.begin(), y.end());
-            // int ymin = *std::min_element(y.begin(), y.end());
 
-            int xmax = std::numeric_limits<int>::min();
-            int xmin = std::numeric_limits<int>::max();
-            int ymax = std::numeric_limits<int>::min();
-            int ymin = std::numeric_limits<int>::max();
-
-            if(x1>xmax) xmax = x1;
-            if(x2>xmax) xmax = x2;
-            if(x3>xmax) xmax = x3;
-            if(x4>xmax) xmax = x4;
-
-            if(y1>ymax) ymax = y1;
-            if(y2>ymax) ymax = y2;
-            if(y3>ymax) ymax = y3;
-            if(y4>ymax) ymax = y4;
-
-            if(x1<xmin) xmin = x1;
-            if(x2<xmin) xmin = x2;
-            if(x3<xmin) xmin = x3;
-            if(x4<xmin) xmin = x4;
-
-            if(y1<ymin) ymin = y1;
-            if(y2<ymin) ymin = y2;
-            if(y3<ymin) ymin = y3;
-            if(y4<ymin) ymin = y4;
-
-            // cout<< "\t!!!Pixel (xmin, xmax, ymin, ymax) = "<< xmin << ", " << xmax <<", " << ymin << ", " << ymax << endl;
+            std::vector<int> x_pixel{x1, x2, x3, x4};
+            std::vector<int> y_pixel{y1, y2, y3, y4};
+                      
+            int xmin = *std::min_element(x_pixel.begin(), x_pixel.end());
+            int xmax = *std::max_element(x_pixel.begin(), x_pixel.end());            
+            int ymin = *std::min_element(y_pixel.begin(), y_pixel.end());
+            int ymax = *std::max_element(y_pixel.begin(), y_pixel.end());
+                       
             //Ensure the 2D pixels are inside image's max width, height
-            if(xmin < 0) xmin = 0;//114;//186;//0;
-            if(ymin < 0) ymin = 0;//40;//74;//0;
-            int img_width = 640;
-            int img_height = 480;
-            if(xmax > img_width-1) xmax = 640;//723;//1085;//img_width-1;
-            if(ymax > img_height-1) ymax = 480;//424;//648;//img_height-1;
-            // cout<<"\timgwidth, imgHeight = "<< img_width <<",  "<< img_height<<endl;
-            // cout<< "\tPixel (xmin, xmax, ymin, ymax) = "<< xmin << ", " << xmax <<", " << ymin << ", " << ymax << endl;
+            if(xmin < 0) xmin = 0;
+            if(ymin < 0) ymin = 0;      
+            if(xmax > width-1) xmax = width;
+            if(ymax > height-1) ymax = height;
+
+            cout<<"\timgwidth, imgHeight = "<< width <<",  "<< height<<endl;
+            cout<< "\tPixel (xmin, xmax, ymin, ymax) = "<< xmin << ", " << xmax <<", " << ymin << ", " << ymax << endl;            
 
             //Map 2D pixel to 3D points
             for(int i = xmin; i <= xmax; i++)
@@ -327,6 +297,10 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             cout << "\tExtract [depth_cloud] = " << marker_all[n].marker_cloud->size() << endl;
             // *aruco_clouds = *aruco_clouds + *(marker_all[n].marker_cloud);
 
+
+            //=========================================//
+            // Estimate marker coordinate
+            //=========================================//
             pcl::PointCloud<PointTRGB>::Ptr tmp(new pcl::PointCloud<PointTRGB>);
             float leaf = 0.005;
             pcl::VoxelGrid<PointTRGB> vg;
@@ -412,14 +386,11 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             // tf2::Matrix3x3 m1(quat);
             // tf2::Matrix3x3 m2(tf2::Quaternion(0,0,1,0));
 
-
-
             // tf2::Transform transform;            
             // transform.setOrigin( tf::Vector3(marker_all[n].center_point.x, marker_all[n].center_point.y, marker_all[n].center_point.z));
             // transform.setRotation( tf::Quaternion(0, 0, 0, 1)); 
             // cout<<transform.
             // <<endl;
-
 
             // tf2::Matrix3x3 Matrix_tmp;
             // tf::Vector3 v6,v7,v8;
