@@ -324,24 +324,24 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
                                    rot.at<double>(1, 0), rot.at<double>(1, 1), rot.at<double>(1, 2),
                                    rot.at<double>(2, 0), rot.at<double>(2, 1), rot.at<double>(2, 2));
             
-            tf2::Quaternion qqq;
-            tf2_rot.getRotation(qqq);
-            cout<<"qqq:"<<qqq.x()<<","<<qqq.y()<<","<<qqq.z()<<","<<qqq.w()<<endl;
+            // tf2::Quaternion qqq;
+            // tf2_rot.getRotation(qqq);
+            // cout<<"qqq:"<<qqq.x()<<","<<qqq.y()<<","<<qqq.z()<<","<<qqq.w()<<endl;
+                     
+            //TODO: 若直接用ar mark 算出來的tvec則tf座標系位置有誤(需檢查是否座標系有誤);用點雲中間點求的話 中心點位在maker點雲中央
+            // tf2::Vector3 vv = tf2::Vector3(marker_all[n].tvec[0],marker_all[n].tvec[1],marker_all[n].tvec[2]);
+            
+            get_3d_center(organized_cloud_ori, marker_all[n].marker_cloud, marker_all[n].center_pixel, marker_all[n].center_point); // Create a transform and convert to a Pose
+            tf2::Vector3 vv = tf2::Vector3(marker_all[n].center_point.x,marker_all[n].center_point.y,marker_all[n].center_point.z);
 
-            // Create a transform and convert to a Pose
-            get_3d_center(organized_cloud_ori, marker_all[n].marker_cloud, marker_all[n].center_pixel, marker_all[n].center_point);
-            // cout<<marker_all[n].center_point.x<<", "<<marker_all[n].center_point.y<<", "<<marker_all[n].center_point.z<<endl;
-
-            tf2::Vector3 vv=tf2::Vector3(marker_all[n].center_point.x,marker_all[n].center_point.y,marker_all[n].center_point.z);
             tf2::Transform tf2_transform(tf2_rot, vv);//tf2::Vector3());
             geometry_msgs::Pose pose_msg;
             tf2::toMsg(tf2_transform, pose_msg);
             cout<<"pose_msg:"<<pose_msg<<endl;
 
-
             std::string marker_coord_name = "marker_" + std::to_string(n);
             // cout<<"Marker_coord_name = "<< marker_coord_name <<endl;
-                
+
             geometry_msgs::TransformStamped trans_Cam2tmp;
             trans_Cam2tmp.header.stamp = ros::Time::now();
             trans_Cam2tmp.header.frame_id = "camera_color_optical_frame";
@@ -357,8 +357,35 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             static tf2_ros::StaticTransformBroadcaster sbr_tmp;
             sbr_tmp.sendTransform(trans_Cam2tmp);
 
+            //顯示Target Pose
+            geometry_msgs::TransformStamped trans_Cam2Tgt;
+            trans_Cam2Tgt.header.stamp = ros::Time::now();
+            trans_Cam2Tgt.header.frame_id = "camera_color_optical_frame";
+            trans_Cam2Tgt.child_frame_id = "Target_frame";
+            trans_Cam2Tgt.transform.translation.x = marker_all[n].center_point.x;// - 0.05;
+            trans_Cam2Tgt.transform.translation.y = marker_all[n].center_point.y;  
+            trans_Cam2Tgt.transform.translation.z = marker_all[n].center_point.z;
+            trans_Cam2Tgt.transform.rotation.x = 0;
+            trans_Cam2Tgt.transform.rotation.y = 0;
+            trans_Cam2Tgt.transform.rotation.z = 1;
+            trans_Cam2Tgt.transform.rotation.w = 0; 
+
+            static tf2_ros::StaticTransformBroadcaster sbr2;
+            sbr2.sendTransform(trans_Cam2Tgt);
+
+            geometry_msgs::Pose pose_msg_tgt;
+            pose_msg_tgt.position.x = trans_Cam2Tgt.transform.translation.x;
+            pose_msg_tgt.position.y = trans_Cam2Tgt.transform.translation.y;
+            pose_msg_tgt.position.z = trans_Cam2Tgt.transform.translation.z;
+            pose_msg_tgt.orientation.x = trans_Cam2Tgt.transform.rotation.x;
+            pose_msg_tgt.orientation.y = trans_Cam2Tgt.transform.rotation.y;
+            pose_msg_tgt.orientation.z = trans_Cam2Tgt.transform.rotation.z;
+            pose_msg_tgt.orientation.w = trans_Cam2Tgt.transform.rotation.w;
+            cout<<"pose_msg_tgt:"<<pose_msg_tgt<<endl;
+
+
             // //=========================================//
-            // // Estimate marker coordinate
+            // // Estimate marker coordinate using point cloud 
             // //=========================================//
             // pcl::PointCloud<PointTRGB>::Ptr tmp(new pcl::PointCloud<PointTRGB>);
             // float leaf = 0.005;
@@ -430,7 +457,7 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             // trans_Cam2Tgt.header.stamp = ros::Time::now();
             // trans_Cam2Tgt.header.frame_id = "camera_color_optical_frame";
             // trans_Cam2Tgt.child_frame_id = "Target_frame";
-            // trans_Cam2Tgt.transform.translation.x = marker_all[n].center_point.x - 0.05;
+            // trans_Cam2Tgt.transform.translation.x = marker_all[n].center_point.x;// - 0.05;
             // trans_Cam2Tgt.transform.translation.y = marker_all[n].center_point.y;  
             // trans_Cam2Tgt.transform.translation.z = marker_all[n].center_point.z;
             // trans_Cam2Tgt.transform.rotation.x = 0;
@@ -440,6 +467,16 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
 
             // static tf2_ros::StaticTransformBroadcaster sbr2;
             // sbr2.sendTransform(trans_Cam2Tgt);
+
+            // geometry_msgs::Pose pose_msg_tgt;
+            // pose_msg_tgt.position.x = trans_Cam2Tgt.transform.translation.x;
+            // pose_msg_tgt.position.y = trans_Cam2Tgt.transform.translation.y;
+            // pose_msg_tgt.position.z = trans_Cam2Tgt.transform.translation.z;
+            // pose_msg_tgt.orientation.x = trans_Cam2Tgt.transform.rotation.x;
+            // pose_msg_tgt.orientation.y = trans_Cam2Tgt.transform.rotation.y;
+            // pose_msg_tgt.orientation.z = trans_Cam2Tgt.transform.rotation.z;
+            // pose_msg_tgt.orientation.w = trans_Cam2Tgt.transform.rotation.w;
+            // cout<<"pose_msg_tgt:"<<pose_msg_tgt<<endl;
 
             // //計算轉換矩陣
             // // tf2::Matrix3x3 m1(quat);

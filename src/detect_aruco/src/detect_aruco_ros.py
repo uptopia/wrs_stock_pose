@@ -120,7 +120,7 @@ class ArUcoMarkerPosture():
     def detect_aruco_markers(self, data):
         global corners
         # Constant parameters used in Aruco methods
-        markerLength = 0.020
+        markerLength = 0.019 #0.020
         axisLength = 0.010
         ARUCO_PARAMETERS = aruco.DetectorParameters_create()
         # ARUCO_PARAMETERS.adaptiveThreshConstant = 10
