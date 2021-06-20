@@ -135,6 +135,44 @@ Visualization Manager:
           Value: false
         marker_0:
           Value: true
+        marker_1:
+          Value: true
+        marker_10:
+          Value: true
+        marker_11:
+          Value: true
+        marker_12:
+          Value: true
+        marker_13:
+          Value: true
+        marker_14:
+          Value: true
+        marker_15:
+          Value: true
+        marker_16:
+          Value: true
+        marker_17:
+          Value: true
+        marker_18:
+          Value: true
+        marker_19:
+          Value: true
+        marker_2:
+          Value: true
+        marker_3:
+          Value: true
+        marker_4:
+          Value: true
+        marker_5:
+          Value: true
+        marker_6:
+          Value: true
+        marker_7:
+          Value: true
+        marker_8:
+          Value: true
+        marker_9:
+          Value: true
       Marker Scale: 0.10000000149011612
       Name: TF
       Show Arrows: true
@@ -145,6 +183,44 @@ Visualization Manager:
           camera_color_frame:
             camera_color_optical_frame:
               marker_0:
+                {}
+              marker_1:
+                {}
+              marker_10:
+                {}
+              marker_11:
+                {}
+              marker_12:
+                {}
+              marker_13:
+                {}
+              marker_14:
+                {}
+              marker_15:
+                {}
+              marker_16:
+                {}
+              marker_17:
+                {}
+              marker_18:
+                {}
+              marker_19:
+                {}
+              marker_2:
+                {}
+              marker_3:
+                {}
+              marker_4:
+                {}
+              marker_5:
+                {}
+              marker_6:
+                {}
+              marker_7:
+                {}
+              marker_8:
+                {}
+              marker_9:
                 {}
           camera_depth_frame:
             camera_depth_optical_frame:
@@ -173,7 +249,7 @@ Visualization Manager:
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
-      Size (Pixels): 2
+      Size (Pixels): 3
       Size (m): 0.009999999776482582
       Style: Points
       Topic: /aruco_cloud
@@ -183,7 +259,7 @@ Visualization Manager:
       Value: true
   Enabled: true
   Global Options:
-    Background Color: 48; 48; 48
+    Background Color: 238; 238; 236
     Default Light: true
     Fixed Frame: camera_color_optical_frame
     Frame Rate: 30
@@ -209,25 +285,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 0.06913843005895615
+      Distance: 0.513808012008667
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.029125165194272995
-        Y: -0.1366642564535141
-        Z: 0.3079601228237152
+        X: 0.03600860387086868
+        Y: 0.012545302510261536
+        Z: 0.27684375643730164
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.5197975039482117
+      Pitch: -1.1597967147827148
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.293582439422607
+      Yaw: 4.673584461212158
     Saved: ~
 Window Geometry:
   Displays:

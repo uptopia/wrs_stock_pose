@@ -13,6 +13,13 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
+//====
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2/LinearMath/Vector3.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+//====
+
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h> //"pcl::fromROSMsg"
 
@@ -20,6 +27,10 @@
 #include <aruco_msgs/ArucoMarkerArray.h>
 
 #include <boost/make_shared.hpp>
+
+//opencv
+#include <opencv2/core.hpp>
+#include <opencv2/calib3d.hpp>
 
 // pcl
 #include <pcl/io/pcd_io.h>
@@ -82,6 +93,7 @@ pcl::PointCloud<PointTRGB>::Ptr organized_cloud_ori(new pcl::PointCloud<PointTRG
 
 ros::Publisher aruco_cloud_pub;
 sensor_msgs::PointCloud2 aruco_cloud_msg;
+
 
 void get_3d_center(pcl::PointCloud<PointTRGB>::Ptr & cloud_ori, pcl::PointCloud<PointTRGB>::Ptr & cloud_obj, Center2D center_pixel, Center3D& center_point)
 {
@@ -241,7 +253,8 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
         organized_cloud_ori->clear();
         pcl::fromROSMsg(*organized_cloud_msg, *organized_cloud_ori);
       
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr aruco_clouds(new pcl::PointCloud<pcl::PointXYZRGBNormal>);            
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr aruco_clouds(new pcl::PointCloud<pcl::PointXYZRGBNormal>);        
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr aruco_clouds_tmp(new pcl::PointCloud<pcl::PointXYZRGB>);
 
         for(int n = 0; n < marker_all.size(); ++n)
         {
@@ -296,172 +309,217 @@ void aruco_cloud_cb(const sensor_msgs::PointCloud2ConstPtr& organized_cloud_msg)
             }
             cout << "\tExtract [depth_cloud] = " << marker_all[n].marker_cloud->size() << endl;
             // *aruco_clouds = *aruco_clouds + *(marker_all[n].marker_cloud);
-
-
-            //=========================================//
-            // Estimate marker coordinate
-            //=========================================//
-            pcl::PointCloud<PointTRGB>::Ptr tmp(new pcl::PointCloud<PointTRGB>);
-            float leaf = 0.005;
-            pcl::VoxelGrid<PointTRGB> vg;
-            vg.setInputCloud(marker_all[n].marker_cloud);
-            vg.setLeafSize(leaf, leaf, leaf);
-            vg.filter(*tmp);
-
-            pcl::NormalEstimation<PointTRGB, pcl::Normal> nor;
-            nor.setInputCloud(marker_all[n].marker_cloud);
-            nor.setSearchSurface(tmp);
-
-            //以kdtree作为索引方式
-            pcl::search::KdTree<PointTRGB>::Ptr treeA(new pcl::search::KdTree<PointTRGB>);            
-            nor.setSearchMethod(treeA);            
+            *aruco_clouds_tmp = *aruco_clouds_tmp + *(marker_all[n].marker_cloud);
             
-            //存储输出数据集
-            pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);            
+            //=========================================//
+            // Rodrigues→3*3 rotation matrix→Quaternion
+            //=========================================//
+            //https://answers.ros.org/question/358188/converting-cvmat-rotation-matrix-to-quaternion/
+            cv::Mat rot(3, 3, CV_64FC1);
+            cv::Rodrigues(marker_all[n].rvec, rot); //cv::Rodrigues(cv::Vec3d({0.0, 0.0, 0.0}), rot);
+            cout << "rot:" << rot << endl;
+
+            // Convert to a tf2::Matrix3x3
+            tf2::Matrix3x3 tf2_rot(rot.at<double>(0, 0), rot.at<double>(0, 1), rot.at<double>(0, 2),
+                                   rot.at<double>(1, 0), rot.at<double>(1, 1), rot.at<double>(1, 2),
+                                   rot.at<double>(2, 0), rot.at<double>(2, 1), rot.at<double>(2, 2));
             
-            nor.setRadiusSearch(0.03);                      
-            nor.compute(*normals);
+            tf2::Quaternion qqq;
+            tf2_rot.getRotation(qqq);
+            cout<<"qqq:"<<qqq.x()<<","<<qqq.y()<<","<<qqq.z()<<","<<qqq.w()<<endl;
 
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr tmpall(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-            pcl::copyPointCloud<PointTRGB,pcl::PointXYZRGBNormal>(*marker_all[n].marker_cloud, *tmpall);
-            for(int num = 0; num<tmpall->size(); num++)
-            {
-                tmpall->points[num].normal_x = normals->points[num].normal_x;
-                tmpall->points[num].normal_y = normals->points[num].normal_y;
-                tmpall->points[num].normal_z = normals->points[num].normal_z;
-            }
-            *aruco_clouds = *aruco_clouds + *tmpall;//*(marker_all[n].marker_cloud);
-
-            //計算中心點位置
+            // Create a transform and convert to a Pose
             get_3d_center(organized_cloud_ori, marker_all[n].marker_cloud, marker_all[n].center_pixel, marker_all[n].center_point);
             // cout<<marker_all[n].center_point.x<<", "<<marker_all[n].center_point.y<<", "<<marker_all[n].center_point.z<<endl;
 
-            //計算中心點姿態
-            Eigen::Matrix3f vect;            
-            CalculatePCA(marker_all[n].marker_cloud, vect);        
-                        
-            double r, p, y;
-            tf2::Matrix3x3 mm;
-            mm.setValue(vect(0),vect(1),vect(2),vect(3),vect(4),vect(5),vect(6),vect(7),vect(8));
-            mm.getRPY(r,p,y); //0,1            
+            tf2::Vector3 vv=tf2::Vector3(marker_all[n].center_point.x,marker_all[n].center_point.y,marker_all[n].center_point.z);
+            tf2::Transform tf2_transform(tf2_rot, vv);//tf2::Vector3());
+            geometry_msgs::Pose pose_msg;
+            tf2::toMsg(tf2_transform, pose_msg);
+            cout<<"pose_msg:"<<pose_msg<<endl;
 
-            tf2::Quaternion quat;
-            quat.setRPY(r,p,y);
 
             std::string marker_coord_name = "marker_" + std::to_string(n);
-            // cout<<"Marker_coord_name = "<< marker_coord_name <<endl;            
+            // cout<<"Marker_coord_name = "<< marker_coord_name <<endl;
+                
+            geometry_msgs::TransformStamped trans_Cam2tmp;
+            trans_Cam2tmp.header.stamp = ros::Time::now();
+            trans_Cam2tmp.header.frame_id = "camera_color_optical_frame";
+            trans_Cam2tmp.child_frame_id = marker_coord_name;//"AAA_frame";            
+            trans_Cam2tmp.transform.translation.x = pose_msg.position.x;
+            trans_Cam2tmp.transform.translation.y = pose_msg.position.y;
+            trans_Cam2tmp.transform.translation.z = pose_msg.position.z;
+            trans_Cam2tmp.transform.rotation.x = pose_msg.orientation.x;
+            trans_Cam2tmp.transform.rotation.y = pose_msg.orientation.y;
+            trans_Cam2tmp.transform.rotation.z = pose_msg.orientation.z;
+            trans_Cam2tmp.transform.rotation.w = pose_msg.orientation.w;
 
-            geometry_msgs::TransformStamped trans_Cam2Mrk;
-            trans_Cam2Mrk.header.stamp = ros::Time::now();
-            trans_Cam2Mrk.header.frame_id = "camera_color_optical_frame";
-            trans_Cam2Mrk.child_frame_id = marker_coord_name;//"AAA_frame";
-            trans_Cam2Mrk.transform.translation.x = marker_all[n].center_point.x;
-            trans_Cam2Mrk.transform.translation.y = marker_all[n].center_point.y;  
-            trans_Cam2Mrk.transform.translation.z = marker_all[n].center_point.z;
-            trans_Cam2Mrk.transform.rotation.x = quat.x();//0;
-            trans_Cam2Mrk.transform.rotation.y = quat.y();//0;
-            trans_Cam2Mrk.transform.rotation.z = quat.z();//0;
-            trans_Cam2Mrk.transform.rotation.w = quat.w();//1;
+            static tf2_ros::StaticTransformBroadcaster sbr_tmp;
+            sbr_tmp.sendTransform(trans_Cam2tmp);
 
-            static tf2_ros::StaticTransformBroadcaster sbr1;
-            sbr1.sendTransform(trans_Cam2Mrk);
+            // //=========================================//
+            // // Estimate marker coordinate
+            // //=========================================//
+            // pcl::PointCloud<PointTRGB>::Ptr tmp(new pcl::PointCloud<PointTRGB>);
+            // float leaf = 0.005;
+            // pcl::VoxelGrid<PointTRGB> vg;
+            // vg.setInputCloud(marker_all[n].marker_cloud);
+            // vg.setLeafSize(leaf, leaf, leaf);
+            // vg.filter(*tmp);
 
-            //顯示Target Pose
-            geometry_msgs::TransformStamped trans_Cam2Tgt;
-            trans_Cam2Tgt.header.stamp = ros::Time::now();
-            trans_Cam2Tgt.header.frame_id = "camera_color_optical_frame";
-            trans_Cam2Tgt.child_frame_id = "Target_frame";
-            trans_Cam2Tgt.transform.translation.x = marker_all[n].center_point.x - 0.05;
-            trans_Cam2Tgt.transform.translation.y = marker_all[n].center_point.y;  
-            trans_Cam2Tgt.transform.translation.z = marker_all[n].center_point.z;
-            trans_Cam2Tgt.transform.rotation.x = 0;
-            trans_Cam2Tgt.transform.rotation.y = 0;
-            trans_Cam2Tgt.transform.rotation.z = 1;
-            trans_Cam2Tgt.transform.rotation.w = 0; 
+            // pcl::NormalEstimation<PointTRGB, pcl::Normal> nor;
+            // nor.setInputCloud(marker_all[n].marker_cloud);
+            // nor.setSearchSurface(tmp);
 
-            static tf2_ros::StaticTransformBroadcaster sbr2;
-            sbr2.sendTransform(trans_Cam2Tgt);
-
-            //計算轉換矩陣
-            // tf2::Matrix3x3 m1(quat);
-            // tf2::Matrix3x3 m2(tf2::Quaternion(0,0,1,0));
-
-            // tf2::Transform transform;            
-            // transform.setOrigin( tf::Vector3(marker_all[n].center_point.x, marker_all[n].center_point.y, marker_all[n].center_point.z));
-            // transform.setRotation( tf::Quaternion(0, 0, 0, 1)); 
-            // cout<<transform.
-            // <<endl;
-
-            // tf2::Matrix3x3 Matrix_tmp;
-            // tf::Vector3 v6,v7,v8;
-            // Matrix_tmp.setRotation(quat);
-            // v6=Matrix_tmp[0];
-            // v7=Matrix_tmp[1];
-            // v8=Matrix_tmp[2];
-            // std::cout<<"四元數q2對應的旋轉矩陣M:"<<v6[0]<<","<<v6[1]<<","<<v6[2]<<std::endl;
-            // std::cout<<"                       "<<v7[0]<<","<<v7[1]<<","<<v7[2]<<std::endl;
-            // std::cout<<"                       "<<v8[0]<<","<<v8[1]<<","<<v8[2]<<std::endl;
-
-
-            // cout<<m1<<endl;
-            // cout<<m2<<endl;
-            // m2.getRotation(quat);
-            // cout<<m2<<endl;
-
-
-
-            // //ROS tf
-            // static tf::TransformBroadcaster br;
-            // tf::Transform transform;
+            // //以kdtree作为索引方式
+            // pcl::search::KdTree<PointTRGB>::Ptr treeA(new pcl::search::KdTree<PointTRGB>);            
+            // nor.setSearchMethod(treeA);            
             
-            // transform.setOrigin( tf::Vector3(marker_all[n].center_point.x, marker_all[n].center_point.y, marker_all[n].center_point.z));
-            // transform.setRotation( tf::Quaternion(0, 0, 0, 1));             
-            // br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera_color_optical_frame", marker_coord_name));//camera_depth_frame
-                        
+            // //存储输出数据集
+            // pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);            
+            
+            // nor.setRadiusSearch(0.03);                      
+            // nor.compute(*normals);
+
+            // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr tmpall(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+            // pcl::copyPointCloud<PointTRGB,pcl::PointXYZRGBNormal>(*marker_all[n].marker_cloud, *tmpall);
+            // for(int num = 0; num<tmpall->size(); num++)
+            // {
+            //     tmpall->points[num].normal_x = normals->points[num].normal_x;
+            //     tmpall->points[num].normal_y = normals->points[num].normal_y;
+            //     tmpall->points[num].normal_z = normals->points[num].normal_z;
+            // }
+            // *aruco_clouds = *aruco_clouds + *tmpall;//*(marker_all[n].marker_cloud);
+
+            // //計算中心點位置
+            // get_3d_center(organized_cloud_ori, marker_all[n].marker_cloud, marker_all[n].center_pixel, marker_all[n].center_point);
+            // // cout<<marker_all[n].center_point.x<<", "<<marker_all[n].center_point.y<<", "<<marker_all[n].center_point.z<<endl;
+
+            // //計算中心點姿態
             // Eigen::Matrix3f vect;            
-            // CalculatePCA(marker_all[n].marker_cloud, vect);
-            // std::cout << "特征向量ve(3x3):\n" << vect << std::endl;
-            // tf2::Quaternion quat;
+            // CalculatePCA(marker_all[n].marker_cloud, vect);        
+                        
+            // double r, p, y;
             // tf2::Matrix3x3 mm;
             // mm.setValue(vect(0),vect(1),vect(2),vect(3),vect(4),vect(5),vect(6),vect(7),vect(8));
-            // // mm.getRotation(quat);
-            // double r, p, y;
+            // mm.getRPY(r,p,y); //0,1            
+
+            // tf2::Quaternion quat;
+            // quat.setRPY(r,p,y);
+
+            // std::string marker_coord_name = "marker_" + std::to_string(n);
+            // // cout<<"Marker_coord_name = "<< marker_coord_name <<endl;            
+
+            // geometry_msgs::TransformStamped trans_Cam2Mrk;
+            // trans_Cam2Mrk.header.stamp = ros::Time::now();
+            // trans_Cam2Mrk.header.frame_id = "camera_color_optical_frame";
+            // trans_Cam2Mrk.child_frame_id = marker_coord_name;//"AAA_frame";
+            // trans_Cam2Mrk.transform.translation.x = marker_all[n].center_point.x;
+            // trans_Cam2Mrk.transform.translation.y = marker_all[n].center_point.y;  
+            // trans_Cam2Mrk.transform.translation.z = marker_all[n].center_point.z;
+            // trans_Cam2Mrk.transform.rotation.x = quat.x();//0;
+            // trans_Cam2Mrk.transform.rotation.y = quat.y();//0;
+            // trans_Cam2Mrk.transform.rotation.z = quat.z();//0;
+            // trans_Cam2Mrk.transform.rotation.w = quat.w();//1;
+
+            // static tf2_ros::StaticTransformBroadcaster sbr1;
+            // sbr1.sendTransform(trans_Cam2Mrk);
+
+            // //顯示Target Pose
+            // geometry_msgs::TransformStamped trans_Cam2Tgt;
+            // trans_Cam2Tgt.header.stamp = ros::Time::now();
+            // trans_Cam2Tgt.header.frame_id = "camera_color_optical_frame";
+            // trans_Cam2Tgt.child_frame_id = "Target_frame";
+            // trans_Cam2Tgt.transform.translation.x = marker_all[n].center_point.x - 0.05;
+            // trans_Cam2Tgt.transform.translation.y = marker_all[n].center_point.y;  
+            // trans_Cam2Tgt.transform.translation.z = marker_all[n].center_point.z;
+            // trans_Cam2Tgt.transform.rotation.x = 0;
+            // trans_Cam2Tgt.transform.rotation.y = 0;
+            // trans_Cam2Tgt.transform.rotation.z = 1;
+            // trans_Cam2Tgt.transform.rotation.w = 0; 
+
+            // static tf2_ros::StaticTransformBroadcaster sbr2;
+            // sbr2.sendTransform(trans_Cam2Tgt);
+
+            // //計算轉換矩陣
+            // // tf2::Matrix3x3 m1(quat);
+            // // tf2::Matrix3x3 m2(tf2::Quaternion(0,0,1,0));
+
+            // // tf2::Transform transform;            
+            // // transform.setOrigin( tf::Vector3(marker_all[n].center_point.x, marker_all[n].center_point.y, marker_all[n].center_point.z));
+            // // transform.setRotation( tf::Quaternion(0, 0, 0, 1)); 
+            // // cout<<transform.
+            // // <<endl;
+
+            // // tf2::Matrix3x3 Matrix_tmp;
+            // // tf::Vector3 v6,v7,v8;
+            // // Matrix_tmp.setRotation(quat);
+            // // v6=Matrix_tmp[0];
+            // // v7=Matrix_tmp[1];
+            // // v8=Matrix_tmp[2];
+            // // std::cout<<"四元數q2對應的旋轉矩陣M:"<<v6[0]<<","<<v6[1]<<","<<v6[2]<<std::endl;
+            // // std::cout<<"                       "<<v7[0]<<","<<v7[1]<<","<<v7[2]<<std::endl;
+            // // std::cout<<"                       "<<v8[0]<<","<<v8[1]<<","<<v8[2]<<std::endl;
+
+
+            // // cout<<m1<<endl;
+            // // cout<<m2<<endl;
+            // // m2.getRotation(quat);
+            // // cout<<m2<<endl;
+
+            // // //ROS tf
+            // // static tf::TransformBroadcaster br;
+            // // tf::Transform transform;
             
-            // // mm.to
-            // mm.getRPY(r,p,y); //0,1
-            // cout<<"rpy:"<<r<<", "<<p<<", "<<y<<endl;
-            // // r+=3.14159;
-            // // quat.normalize();
-            // // cout<<"quat:"<<quat.x()<<", "<<quat.y()<<", "<<quat.z()<<", "<<quat.w()<<endl;
-
-            ////ROS tf2
-            // static tf2_ros::StaticTransformBroadcaster sbr;
-            // geometry_msgs::TransformStamped transform;
-            // transform.header.stamp = ros::Time::now();
-            // transform.header.frame_id = "camera_color_optical_frame"; //"camera_link";
-            // transform.child_frame_id = marker_coord_name;
-            // transform.transform.translation.x = marker_all[n].center_point.x;
-            // transform.transform.translation.y = marker_all[n].center_point.y;
-            // transform.transform.translation.z = marker_all[n].center_point.z;
-
+            // // transform.setOrigin( tf::Vector3(marker_all[n].center_point.x, marker_all[n].center_point.y, marker_all[n].center_point.z));
+            // // transform.setRotation( tf::Quaternion(0, 0, 0, 1));             
+            // // br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera_color_optical_frame", marker_coord_name));//camera_depth_frame
+                        
+            // // Eigen::Matrix3f vect;            
+            // // CalculatePCA(marker_all[n].marker_cloud, vect);
+            // // std::cout << "特征向量ve(3x3):\n" << vect << std::endl;
             // // tf2::Quaternion quat;
-            // // quat.setRPY(0.0, 0.0, 0.0); //roll, pitch, yaw (around X, Y, Z)
-            // //quat.setRPY(tf::createQuaternionFromRPY (-1 * thetax, -1 * thetay, -1 * thetaz));
-            // cout<<"rpy:"<<r<<", "<<p<<", "<<y<<endl;
-            // cout<<"quat:"<<quat.x()<<", "<<quat.y()<<", "<<quat.z()<<", "<<quat.w()<<endl;
-            // quat.setRPY(r,p,y);            
-            // transform.transform.rotation.x = quat.x();
-            // transform.transform.rotation.y = quat.y();
-            // transform.transform.rotation.z = quat.z();
-            // transform.transform.rotation.w = quat.w();
+            // // tf2::Matrix3x3 mm;
+            // // mm.setValue(vect(0),vect(1),vect(2),vect(3),vect(4),vect(5),vect(6),vect(7),vect(8));
+            // // // mm.getRotation(quat);
+            // // double r, p, y;
+            
+            // // // mm.to
+            // // mm.getRPY(r,p,y); //0,1
+            // // cout<<"rpy:"<<r<<", "<<p<<", "<<y<<endl;
+            // // // r+=3.14159;
+            // // // quat.normalize();
+            // // // cout<<"quat:"<<quat.x()<<", "<<quat.y()<<", "<<quat.z()<<", "<<quat.w()<<endl;
 
-            // sbr.sendTransform(transform);
+            // ////ROS tf2
+            // // static tf2_ros::StaticTransformBroadcaster sbr;
+            // // geometry_msgs::TransformStamped transform;
+            // // transform.header.stamp = ros::Time::now();
+            // // transform.header.frame_id = "camera_color_optical_frame"; //"camera_link";
+            // // transform.child_frame_id = marker_coord_name;
+            // // transform.transform.translation.x = marker_all[n].center_point.x;
+            // // transform.transform.translation.y = marker_all[n].center_point.y;
+            // // transform.transform.translation.z = marker_all[n].center_point.z;
 
-            // // cout<<normals->points[0].normal_x<<", "<<normals->points[0].normal_y<<", "<<normals->points[0].normal_z<<", "<<normals->points[0].curvature<<endl;
+            // // // tf2::Quaternion quat;
+            // // // quat.setRPY(0.0, 0.0, 0.0); //roll, pitch, yaw (around X, Y, Z)
+            // // //quat.setRPY(tf::createQuaternionFromRPY (-1 * thetax, -1 * thetay, -1 * thetaz));
+            // // cout<<"rpy:"<<r<<", "<<p<<", "<<y<<endl;
+            // // cout<<"quat:"<<quat.x()<<", "<<quat.y()<<", "<<quat.z()<<", "<<quat.w()<<endl;
+            // // quat.setRPY(r,p,y);            
+            // // transform.transform.rotation.x = quat.x();
+            // // transform.transform.rotation.y = quat.y();
+            // // transform.transform.rotation.z = quat.z();
+            // // transform.transform.rotation.w = quat.w();
+
+            // // sbr.sendTransform(transform);
+
+            // // // cout<<normals->points[0].normal_x<<", "<<normals->points[0].normal_y<<", "<<normals->points[0].normal_z<<", "<<normals->points[0].curvature<<endl;
         }
 
         //Publish pcl::PointCloud to ROS sensor::PointCloud2, and to topic
-        pcl::toROSMsg(*aruco_clouds, aruco_cloud_msg);        
+        // pcl::toROSMsg(*aruco_clouds, aruco_cloud_msg);
+        pcl::toROSMsg(*aruco_clouds_tmp, aruco_cloud_msg);        
         aruco_cloud_msg.header.frame_id = "camera_color_optical_frame";        
         aruco_cloud_pub.publish(aruco_cloud_msg);        
     }
