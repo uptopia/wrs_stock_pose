@@ -1,5 +1,6 @@
 ```
 git clone https://github.com/uptopia/wrs_stock_pose.git
+cd wrs_stock_pose
 git checkout <branch-name>
 cd ..
 catkin_make
@@ -72,7 +73,7 @@ catkin_make
 <Terminal 3> Detect ArUco Marker
     $cd <ws_name>
     $. devel/setup.bash
-    $rosrun rosrun detect_aruco detect_aruco_ros.py
+    $rosrun detect_aruco detect_aruco_ros.py
 
 <Terminal 4> Detect ArUco Marker Cloud Pose
     $cd <ws_name>
