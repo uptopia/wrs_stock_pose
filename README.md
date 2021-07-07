@@ -2,7 +2,6 @@
 git clone https://github.com/uptopia/wrs_stock_pose.git
 cd wrs_stock_pose
 git checkout <branch-name>
-cd ..
 catkin_make
 ```
 # wrs_stock_pose
